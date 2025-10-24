@@ -120,14 +120,27 @@ void linear_to_raw_address_translation::addrdec_tlx(new_addr_type addr,
     rest_of_addr |= addr & ((1 << ADDR_CHIP_S) - 1);
 
     tlx->chip = addr_for_chip;
-    tlx->bk = addrdec_packbits(addrdec_mask[BK], rest_of_addr,
-                               addrdec_mkhigh[BK], addrdec_mklow[BK]);
-    tlx->row = addrdec_packbits(addrdec_mask[ROW], rest_of_addr,
-                                addrdec_mkhigh[ROW], addrdec_mklow[ROW]);
-    tlx->col = addrdec_packbits(addrdec_mask[COL], rest_of_addr,
-                                addrdec_mkhigh[COL], addrdec_mklow[COL]);
+    // sg05060: New Addr-DEC for GDDR in-line ECC
+    // We use only 0-59 columns for data
+    // 60-63 columns are for redundancies
+    // tlx->bk = addrdec_packbits(addrdec_mask[BK], rest_of_addr,
+    //                            addrdec_mkhigh[BK], addrdec_mklow[BK]);
+    // tlx->row = addrdec_packbits(addrdec_mask[ROW], rest_of_addr,
+    //                             addrdec_mkhigh[ROW], addrdec_mklow[ROW]);
+    // tlx->col = addrdec_packbits(addrdec_mask[COL], rest_of_addr,
+    //                             addrdec_mkhigh[COL], addrdec_mklow[COL]);
     tlx->burst = addrdec_packbits(addrdec_mask[BURST], rest_of_addr,
                                   addrdec_mkhigh[BURST], addrdec_mklow[BURST]);
+    unsigned int low_col, high_col, low_bk, high_bk;
+    rest_of_addr = rest_of_addr % 0xF000000;
+    low_col = ((rest_of_addr >> 5) & ((1<<2)-1));
+    low_bk = ((rest_of_addr >> 7) & ((1<<1)-1));
+    high_col = ((rest_of_addr >> 8) % 15);
+    tlx->col = (high_col << 2) + low_col;
+    rest_of_addr = (rest_of_addr >> 8) /15;
+    high_bk = rest_of_addr & ((1<<3)-1);
+    tlx->bk = (high_bk << 1) + low_bk;
+    tlx->row = rest_of_addr >> 3;
   }
 
   switch (memory_partition_indexing) {

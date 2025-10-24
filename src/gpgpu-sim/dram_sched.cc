@@ -83,6 +83,13 @@ void frfcfs_scheduler::add_req(dram_req_t *req) {
     m_queue[req->bk].push_front(req);
     std::list<dram_req_t *>::iterator ptr = m_queue[req->bk].begin();
     m_bins[req->bk][req->row].push_front(ptr);  // newest reqs to the front
+    //sg05060
+    if(req) {
+      if(req->data->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] sched->add_req in scheduler. uid : %d, is_redun : %d, bk : %d, row : %d, is_write : %d\n",req->data->get_request_uid(), 
+        req->data->get_is_redundancy(), req->bk, req->row, req->data->is_write());
+      }
+    }
   }
 }
 
@@ -134,6 +141,44 @@ dram_req_t *frfcfs_scheduler::schedule(unsigned bank, unsigned curr_row) {
     m_current_bins = m_write_bins;
     m_current_last_row = m_last_write_row;
   }
+  
+  /* sg05060: Debug */
+  const unsigned TARGET_UID = 3828593u;
+  const unsigned TARGET_ROW = 4378u; // 또는 4378u
+  auto bin_it = m_bins[bank].find(TARGET_ROW);
+  if (bin_it != m_bins[bank].end()) {
+    // bin에는 m_queue[bank]를 가리키는 iterator들이 들어있음
+    bool found = false;
+    for (auto it2 = bin_it->second.begin(); it2 != bin_it->second.end(); ++it2) {
+      auto qit = *it2;                            // iterator into m_queue[bank]
+      if (qit == m_queue[bank].end()) continue;   // 방어
+      dram_req_t* r = *qit;
+      if (!r || !r->data) continue;
+      if (r->data->get_request_uid() == TARGET_UID) { found = true; break; }
+    }
+
+    if (found) {
+      printf("\n[PSH_DEBUG][READ_BIN] dram=%u bank=%u row=%u entries=%zu\n",
+              m_dram->id, bank, TARGET_ROW, bin_it->second.size());
+      printf("  ord |    uid | rdd | wr  |  col | bk\n");
+      printf("  ----+--------+-----+-----+------+---\n");
+      unsigned ord = 0;
+      for (auto it2 = bin_it->second.begin(); it2 != bin_it->second.end(); ++it2, ++ord) {
+        auto qit = *it2;                          // iterator into m_queue[bank]
+        if (qit == m_queue[bank].end()) continue; // 방어
+        dram_req_t* r = *qit;
+        if (!r || !r->data) continue;
+
+        unsigned uid = r->data->get_request_uid();
+        int rdd      = (int)r->data->get_is_redundancy();
+        int wr       = (int)r->data->is_write();
+        printf("  %3u | %6u |  %d  |  %d  | %4u | %2u%s\n",
+                ord, uid, rdd, wr, r->col, r->bk,
+                (uid==TARGET_UID ? "  <- TARGET" : ""));
+      }
+    }
+  }
+
 
   if (m_current_last_row[bank] == NULL) {
     if (m_current_queue[bank].empty()) return NULL;
@@ -209,6 +254,12 @@ void dram_t::scheduler_frfcfs() {
   frfcfs_scheduler *sched = m_frfcfs_scheduler;
   while (!mrqq->empty()) {
     dram_req_t *req = mrqq->pop();
+    
+    //sg05060
+    if(req->data->get_request_uid() == 3828593) {
+      printf("[PSH_DEBUG] mrqq->pop in scheduler. uid : %d, is_redun : %d\n",req->data->get_request_uid(), 
+      req->data->get_is_redundancy());
+    }
 
     // Power stats
     // if(req->data->get_type() != READ_REPLY && req->data->get_type() !=
@@ -232,6 +283,16 @@ void dram_t::scheduler_frfcfs() {
     unsigned b = (i + prio) % m_config->nbk;
     if (!bk[b]->mrq) {
       req = sched->schedule(b, bk[b]->curr_row);
+      //sg05060
+      if(req != nullptr) {
+        if(req->data->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] sched->pop in scheduler. uid : %d, is_redun : %d\n",req->data->get_request_uid(), 
+        req->data->get_is_redundancy());
+        }
+      }
+      if((req != nullptr) && (this->id == 0) && (b == 4)) {
+        printf("[PSH_DEBUG] Bank[4] Deteced\n");
+      }
 
       if (req) {
         req->data->set_status(IN_PARTITION_MC_BANK_ARB_QUEUE,

@@ -60,6 +60,13 @@ class mem_fetch {
             mem_fetch *original_wr_mf = NULL);
   ~mem_fetch();
 
+  // sg05060
+  mem_fetch(const mem_fetch &other);
+  void set_redundancy_pair(mem_fetch *redundancy_rq);
+  bool get_is_redundancy() const { return is_redundancy; }
+  const mem_fetch *get_redundancy_pair() const { return redundancy_pair; }
+  unsigned get_rdd_tag() const { return rdd_tag; }
+
   void set_status(enum mem_fetch_status status, unsigned long long cycle);
   void set_reply() {
     assert(m_access.get_type() != L1_WRBK_ACC &&
@@ -131,6 +138,11 @@ class mem_fetch {
   mem_fetch *get_original_wr_mf() { return original_wr_mf; }
 
  private:
+  // sg05060
+  bool is_redundancy;
+  const mem_fetch *redundancy_pair;
+  unsigned rdd_tag;
+
   // request source information
   unsigned m_request_uid;
   unsigned m_sid;

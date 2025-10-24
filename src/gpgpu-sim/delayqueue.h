@@ -172,6 +172,17 @@ class fifo_pipeline {
     printf("\n");
   }
 
+  //sg05060: debug function
+  void debug_collect(std::vector<T*>& out) const {
+    out.clear();
+    fifo_data<T>* it = m_head;
+    while (it) {
+      if (it->m_data) out.push_back(it->m_data);
+      it = it->m_next;
+    }
+  }
+  unsigned debug_count() const { return m_n_element; }
+  
  private:
   const char* m_name;
 

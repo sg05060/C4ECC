@@ -39,7 +39,7 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
                      unsigned wid, unsigned sid, unsigned tpc,
                      const memory_config *config, unsigned long long cycle,
                      mem_fetch *m_original_mf, mem_fetch *m_original_wr_mf)
-    : m_access(access)
+    : m_access(access), is_redundancy(false), redundancy_pair(nullptr)
 
 {
   m_request_uid = sm_next_mf_request_uid++;
@@ -70,6 +70,8 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
   m_status_change = cycle;
   m_mem_config = config;
   icnt_flit_size = config->icnt_flit_size;
+  // sg05060
+  rdd_tag = (m_raw_addr.row << 10) + (m_raw_addr.bk << 6) + ((m_raw_addr.col >> 5) / 15); 
   original_mf = m_original_mf;
   original_wr_mf = m_original_wr_mf;
   if (m_original_mf) {
@@ -79,6 +81,39 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
 }
 
 mem_fetch::~mem_fetch() { m_status = MEM_FETCH_DELETED; }
+
+// sg05060: Copying mem_fetch for Redundancy Request
+mem_fetch::mem_fetch(const mem_fetch &other)
+    : m_access(other.m_access)
+{
+  m_request_uid = other.m_request_uid;
+  m_inst = other.m_inst;
+  m_data_size = other.m_data_size;
+  m_ctrl_size = other.m_ctrl_size;
+  m_sid = other.m_sid;
+  m_tpc = other.m_tpc;
+  m_wid = other.m_wid;
+  m_raw_addr = other.m_raw_addr;
+  m_partition_addr = other.m_partition_addr;
+  m_type = other.m_type;
+  m_timestamp = other.m_timestamp;
+  m_status = other.m_status;
+  m_status_change = other.m_status_change;
+  m_mem_config = other.m_mem_config;
+  icnt_flit_size = other.icnt_flit_size;
+  original_mf = other.original_mf;
+  original_wr_mf = other.original_wr_mf;
+  rdd_tag = other.rdd_tag;
+  is_redundancy = true;
+  redundancy_pair = &other;
+}
+
+// sg05060: Set Redundancy Pair
+void mem_fetch::set_redundancy_pair(mem_fetch *redundancy_rq)
+{
+  redundancy_pair = redundancy_rq;
+}
+
 
 #define MF_TUP_BEGIN(X) static const char *Status_str[] = {
 #define MF_TUP(X) #X

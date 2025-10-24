@@ -110,6 +110,11 @@ class memory_partition_unit {
     return m_gpu;
   }
 
+  //sg05060
+  void debug_dump_dram_queues() const;
+  //static inline const char* yesno(bool v);
+  //static inline unsigned pair_uid(const mem_fetch* mf);
+
  private:
   unsigned m_id;
   const memory_config *m_config;
@@ -167,6 +172,8 @@ class memory_sub_partition {
 
   unsigned get_id() const { return m_id; }
 
+  //sg05060
+  const std::set<mem_fetch *>& get_request_tracker() const { return m_request_tracker; }
   bool busy() const;
 
   void cache_cycle(unsigned cycle);

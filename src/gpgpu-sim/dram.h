@@ -115,7 +115,12 @@ class dram_t {
          class memory_stats_t *stats, class memory_partition_unit *mp,
          class gpgpu_sim *gpu);
 
+  // sg05060
+  std::vector<mem_fetch*> *get_rdd_returnq() { return rdd_returnq; }
+  fifo_pipeline<mem_fetch> *get_returnq() { return returnq; }
+
   bool full(bool is_write) const;
+  bool rd_full(bool is_write) const; // sg05060
   void print(FILE *simFile) const;
   void visualize() const;
   void print_stat(FILE *simFile);
@@ -142,6 +147,11 @@ class dram_t {
 
   const memory_config *m_config;
 
+  //sg05060: debug function
+   void debug_collect_returnq(std::vector<mem_fetch*>& out) const {
+    returnq->debug_collect(out);
+  }
+  unsigned debug_returnq_count() const { return returnq->debug_count(); }
  private:
   bankgrp_t **bkgrp;
 
@@ -171,7 +181,8 @@ class dram_t {
   // buffer to hold packets when DRAM processing is over
   // should be filled with dram clock and popped with l2or icnt clock
   fifo_pipeline<mem_fetch> *returnq;
-
+  std::vector<mem_fetch*> *rdd_returnq; //sg05060
+  
   unsigned int dram_util_bins[10];
   unsigned int dram_eff_bins[10];
   unsigned int last_n_cmd, last_n_activity, last_bwutil;

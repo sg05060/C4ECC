@@ -122,6 +122,8 @@ dram_t::dram_t(unsigned int partition_id, const memory_config *config,
       m_config->gpgpu_dram_return_queue_size == 0
           ? 1024
           : m_config->gpgpu_dram_return_queue_size);
+  rdd_returnq = new std::vector<mem_fetch*>(); //sg05060
+
   m_frfcfs_scheduler = NULL;
   if (m_config->scheduler_type == DRAM_FRFCFS)
     m_frfcfs_scheduler = new frfcfs_scheduler(m_config, this, stats);
@@ -174,6 +176,24 @@ bool dram_t::full(bool is_write) const {
     } else
       return m_frfcfs_scheduler->num_pending() >=
              m_config->gpgpu_frfcfs_dram_sched_queue_size;
+  } else
+    return mrqq->full();
+}
+
+//sg05060
+bool dram_t::rd_full(bool is_write) const {
+  if (m_config->scheduler_type == DRAM_FRFCFS) {
+    if (m_config->gpgpu_frfcfs_dram_sched_queue_size == 0) return false;
+    if (m_config->seperate_write_queue_enabled) {
+      if (is_write)
+        return m_frfcfs_scheduler->num_write_pending() >=
+               (m_config->gpgpu_frfcfs_dram_write_queue_size - 1);
+      else
+        return m_frfcfs_scheduler->num_pending() >=
+               (m_config->gpgpu_frfcfs_dram_sched_queue_size - 1);
+    } else
+      return m_frfcfs_scheduler->num_pending() >=
+             (m_config->gpgpu_frfcfs_dram_sched_queue_size - 1);
   } else
     return mrqq->full();
 }
@@ -235,7 +255,9 @@ dram_req_t::dram_req_t(class mem_fetch *mf, unsigned banks,
   }
 
   row = tlx.row;
-  col = tlx.col;
+  //col = tlx.col;
+  //sg05060 : re-mapping col address for redundancy request
+  col = (mf->get_is_redundancy())? ((60 + ((tlx.col >> 5) % 4)) << 5) + (tlx.col & ((1<<5) - 1)) : tlx.col;
   nbytes = mf->get_data_size();
 
   timestamp = m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle;
@@ -304,7 +326,14 @@ void dram_t::cycle() {
         if (data->get_access_type() != L1_WRBK_ACC &&
             data->get_access_type() != L2_WRBK_ACC) {
           data->set_reply();
-          returnq->push(data);
+          //returnq->push(data);
+          //sg05060: Redundancy->rdd_returnq & Data->returnq
+          if(data->get_is_redundancy()) {
+            rdd_returnq->push_back(data);
+          }
+          else {
+            returnq->push(data);
+          }
         } else {
           m_memory_partition_unit->set_done(data);
           delete data;

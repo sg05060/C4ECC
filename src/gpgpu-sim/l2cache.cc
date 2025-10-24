@@ -303,28 +303,77 @@ void memory_partition_unit::simple_dram_model_cycle() {
   //}
 }
 
+// sg05060: Debug
+static inline const char* yesno(bool v){ return v ? "Y":"N"; }
+
+// sg05060: Debug
+static inline unsigned pair_uid(const mem_fetch* mf){
+  auto p = mf ? mf->get_redundancy_pair() : nullptr;
+  return p ? p->get_request_uid() : 0u;
+}
+
 void memory_partition_unit::dram_cycle() {
   // pop completed memory request from dram and push it to dram-to-L2 queue
   // of the original sub partition
   mem_fetch *mf_return = m_dram->return_queue_top();
   if (mf_return) {
-    unsigned dest_global_spid = mf_return->get_sub_partition_id();
-    int dest_spid = global_sub_partition_id_to_local_id(dest_global_spid);
-    assert(m_sub_partition[dest_spid]->get_id() == dest_global_spid);
-    if (!m_sub_partition[dest_spid]->dram_L2_queue_full()) {
-      if (mf_return->get_access_type() == L1_WRBK_ACC) {
-        m_sub_partition[dest_spid]->set_done(mf_return);
-        delete mf_return;
-      } else {
-        m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
-        mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
-                              m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
-        m_arbitration_metadata.return_credit(dest_spid);
-        MEMPART_DPRINTF(
-            "mem_fetch request %p return from dram to sub partition %d\n",
-            mf_return, dest_spid);
+    //sg05060 : Data Response back only when redundancy is available
+    if(mf_return->get_redundancy_pair() == nullptr) {
+      unsigned dest_global_spid = mf_return->get_sub_partition_id();
+      int dest_spid = global_sub_partition_id_to_local_id(dest_global_spid);
+      assert(m_sub_partition[dest_spid]->get_id() == dest_global_spid);
+      if (!m_sub_partition[dest_spid]->dram_L2_queue_full()) {
+        if (mf_return->get_access_type() == L1_WRBK_ACC) {
+          m_sub_partition[dest_spid]->set_done(mf_return);
+          delete mf_return;
+        } else {
+          m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
+          mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
+                                m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
+          m_arbitration_metadata.return_credit(dest_spid);
+          MEMPART_DPRINTF(
+              "mem_fetch request %p return from dram to sub partition %d\n",
+              mf_return, dest_spid);
+        }
+        m_dram->return_queue_pop();
       }
-      m_dram->return_queue_pop();
+    }
+    else {
+      auto rdd_returnq = m_dram->get_rdd_returnq();
+      auto it = rdd_returnq->begin();
+      while (it != rdd_returnq->end()){
+        mem_fetch *rdd_mf = *it;
+        if (mf_return->get_redundancy_pair() != rdd_mf){
+            ++it;
+            continue;
+        }
+        unsigned dest_global_spid = mf_return->get_sub_partition_id();
+        int dest_spid = global_sub_partition_id_to_local_id(dest_global_spid);
+        assert(m_sub_partition[dest_spid]->get_id() == dest_global_spid);
+        if (!m_sub_partition[dest_spid]->dram_L2_queue_full()) {
+          if ((mf_return->get_access_type() == L1_WRBK_ACC) || (mf_return->get_access_type() == L2_WRBK_ACC)) {
+            printf("[PSH_DEBUG] L1_WRBK_ACC in mf_return. uid: %d\n", mf_return->get_request_uid());
+            m_sub_partition[dest_spid]->set_done(mf_return);
+            m_sub_partition[dest_spid]->set_done(*it);
+            it = rdd_returnq->erase(it);
+            delete rdd_mf;
+            delete mf_return;
+          } else {
+            m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
+            mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
+                        m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
+            m_arbitration_metadata.return_credit(dest_spid);
+            m_sub_partition[dest_spid]->set_done(*it); // hojung: rdd_returnq Debugging    
+            it = rdd_returnq->erase(it);
+            delete rdd_mf;
+            MEMPART_DPRINTF(
+                "mem_fetch request %p return from dram to sub partition %d\n",
+                mf_return, dest_spid);
+          }
+          m_dram->return_queue_pop();
+        }
+        break;
+      }
     }
   } else {
     m_dram->return_queue_pop();
@@ -345,7 +394,15 @@ void memory_partition_unit::dram_cycle() {
     if (!m_sub_partition[spid]->L2_dram_queue_empty() &&
         can_issue_to_dram(spid)) {
       mem_fetch *mf = m_sub_partition[spid]->L2_dram_queue_top();
-      if (m_dram->full(mf->is_write())) break;
+      //if (m_dram->full(mf->is_write())) break;
+      //sg05060
+      if (m_dram->rd_full(mf->is_write())) break;
+
+      //sg05060: Debug
+      if(mf->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] Deadlock Request(3828593) access type : %d, size : %d\n", mf->get_access_type(),
+        mf->get_data_size());
+      }
 
       m_sub_partition[spid]->L2_dram_queue_pop();
       MEMPART_DPRINTF(
@@ -368,12 +425,128 @@ void memory_partition_unit::dram_cycle() {
   if (!m_dram_latency_queue.empty() &&
       ((m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle) >=
        m_dram_latency_queue.front().ready_cycle) &&
-      !m_dram->full(m_dram_latency_queue.front().req->is_write())) {
+      //!m_dram->full(m_dram_latency_queue.front().req->is_write())) {
+      //sg05060
+        !m_dram->rd_full(m_dram_latency_queue.front().req->is_write())) {
     mem_fetch *mf = m_dram_latency_queue.front().req;
     m_dram_latency_queue.pop_front();
-    m_dram->push(mf);
+    //m_dram->push(mf);
+    //sg05060 : Redundancy check 
+
+    if(!(mf->get_is_write())) {
+      mem_fetch *rdd_mf = new mem_fetch(*mf);
+      mf->set_redundancy_pair(rdd_mf);
+      rdd_mf->set_redundancy_pair(mf);
+      m_dram->push(mf);
+      if(mf->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] Deadlock Requeset Tracking...normal read mf, type: %d\n", mf->get_access_type());
+      }
+      m_dram->push(rdd_mf);
+      if(rdd_mf->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] Deadlock Requeset Tracking...rdd read mf, type: %d\n", rdd_mf->get_access_type());
+      }
+    } 
+    else {
+      mem_fetch *rdd_mf = new mem_fetch(*mf);
+      mf->set_redundancy_pair(rdd_mf);
+      rdd_mf->set_redundancy_pair(mf);
+      m_dram->push(mf);
+      if(mf->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] Deadlock Requeset Tracking...normal write mf, type: %d\n", mf->get_access_type());
+      }
+      m_dram->push(rdd_mf);
+      if(rdd_mf->get_request_uid() == 3828593) {
+        printf("[PSH_DEBUG] Deadlock Requeset Tracking...rdd write mf, type: %d\n", rdd_mf->get_access_type());
+      }
+    }
+  }
+
+  // sg05060: Debug
+  if(m_id == 0) {
+    if((m_gpu->gpu_sim_cycle % 5000 == 0) || (m_gpu->gpu_sim_cycle % 5001 == 0) || (m_gpu->gpu_sim_cycle % 5002 == 0)) {
+      debug_dump_dram_queues();
+      /*
+      printf("\n===== Pending tracker dump @ cycle=%llu (mem_part=%u) =====\n", m_gpu->gpu_sim_cycle, m_id);
+      for (unsigned p = 0; p < m_config->m_n_sub_partition_per_memory_channel; ++p) {
+        const std::set<mem_fetch *> &pend = m_sub_partition[p]->get_request_tracker();
+        if (pend.empty()) continue;
+        for (std::set<mem_fetch *>::const_iterator it = pend.begin();
+          it != pend.end(); ++it) {
+          mem_fetch *mf = *it;
+          if (!mf) continue;
+
+          // 이미 l2cache.cc에 있는 헬퍼 재사용 (없으면 간단히 대체)
+          // static inline const char* yesno(bool v);
+          // static inline unsigned pair_uid(const mem_fetch* mf);
+          printf("  uid=%u | type=%d | wr=%s | spid=%d | pair=%u | addr=0x%012llx\n",
+                mf->get_request_uid(),
+                (int)mf->get_access_type(),
+                yesno(mf->is_write()),
+                mf->get_sub_partition_id(),
+                pair_uid(mf),
+                (unsigned long long)mf->get_addr());
+        }
+      }
+      */
+    }
   }
 }
+
+// sg05060: Debug
+void memory_partition_unit::debug_dump_dram_queues() const {
+  std::vector<mem_fetch*> ret_snapshot;
+  m_dram->debug_collect_returnq(ret_snapshot);
+  printf("\n====================[ RDD/RETURNQ DUMP ]====================\n");
+  printf("mem_part=%u\n", m_id);
+  printf("------------------------------------------------------------\n");
+
+  // RETURNQ
+  printf("[RETURNQ] (entries=%zu)\n", ret_snapshot.size());
+  if (!ret_snapshot.empty()){
+    printf("  %-3s | %-6s | %-5s | %-3s | %-4s | %-6s | %-14s\n",
+           "idx","uid","type","wr","spid","pair","addr");
+    printf("  -----+--------+-------+-----+------+--------+----------------\n");
+    for (size_t i=0;i<ret_snapshot.size();++i){
+      mem_fetch* mf = ret_snapshot[i];
+      if (!mf) continue;
+      printf("  %-3zu | %-6u | %-5d | %-3s | %-4d | %-6u | 0x%012llx\n",
+             i,
+             mf->get_request_uid(),
+             (int)mf->get_access_type(),
+             yesno(mf->is_write()),
+             mf->get_sub_partition_id(),
+             pair_uid(mf),
+             (unsigned long long)mf->get_addr());
+    }
+  } else {
+    printf("  (empty)\n");
+  }
+
+  //RDD_RETURNQ
+  const std::vector<mem_fetch*>* rddq = m_dram->get_rdd_returnq();
+  printf("\n[RDD_RETURNQ] (entries=%zu)\n", rddq ? rddq->size() : 0);
+  if (rddq && !rddq->empty()){
+    printf("  %-3s | %-6s | %-5s | %-3s | %-4s | %-6s | %-14s\n",
+           "idx","uid","type","wr","spid","pair","addr");
+    printf("  -----+--------+-------+-----+------+--------+----------------\n");
+    for (size_t i=0;i<rddq->size();++i){
+      mem_fetch* mf = (*rddq)[i];
+      if (!mf) continue;
+      printf("  %-3zu | %-6u | %-5d | %-3s | %-4d | %-6u | 0x%012llx\n",
+             i,
+             mf->get_request_uid(),
+             (int)mf->get_access_type(),
+             yesno(mf->is_write()),
+             mf->get_sub_partition_id(),
+             pair_uid(mf),
+             (unsigned long long)mf->get_addr());
+    }
+  } else {
+    printf("  (empty)\n");
+  }
+  printf("============================================================\n\n");
+}
+
 
 void memory_partition_unit::set_done(mem_fetch *mf) {
   unsigned global_spid = mf->get_sub_partition_id();
@@ -381,7 +554,9 @@ void memory_partition_unit::set_done(mem_fetch *mf) {
   assert(m_sub_partition[spid]->get_id() == global_spid);
   if (mf->get_access_type() == L1_WRBK_ACC ||
       mf->get_access_type() == L2_WRBK_ACC) {
-    m_arbitration_metadata.return_credit(spid);
+    //m_arbitration_metadata.return_credit(spid);
+    // sg05060
+    if(!mf->get_is_redundancy()) m_arbitration_metadata.return_credit(spid);
     MEMPART_DPRINTF(
         "mem_fetch request %p return from dram to sub partition %d\n", mf,
         spid);
