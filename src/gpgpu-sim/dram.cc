@@ -329,7 +329,8 @@ void dram_t::cycle() {
           //returnq->push(data);
           //sg05060: Redundancy->rdd_returnq & Data->returnq
           if(data->get_is_redundancy()) {
-            rdd_returnq->push_back(data);
+            //rdd_returnq->push_back(data);
+            delete data;
           }
           else {
             returnq->push(data);

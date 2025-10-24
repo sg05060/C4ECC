@@ -318,7 +318,7 @@ void memory_partition_unit::dram_cycle() {
   mem_fetch *mf_return = m_dram->return_queue_top();
   if (mf_return) {
     //sg05060 : Data Response back only when redundancy is available
-    if(mf_return->get_redundancy_pair() == nullptr) {
+    //if(mf_return->get_redundancy_pair() == nullptr) {
       unsigned dest_global_spid = mf_return->get_sub_partition_id();
       int dest_spid = global_sub_partition_id_to_local_id(dest_global_spid);
       assert(m_sub_partition[dest_spid]->get_id() == dest_global_spid);
@@ -337,44 +337,44 @@ void memory_partition_unit::dram_cycle() {
         }
         m_dram->return_queue_pop();
       }
-    }
-    else {
-      auto rdd_returnq = m_dram->get_rdd_returnq();
-      auto it = rdd_returnq->begin();
-      while (it != rdd_returnq->end()){
-        mem_fetch *rdd_mf = *it;
-        if (mf_return->get_redundancy_pair() != rdd_mf){
-            ++it;
-            continue;
-        }
-        unsigned dest_global_spid = mf_return->get_sub_partition_id();
-        int dest_spid = global_sub_partition_id_to_local_id(dest_global_spid);
-        assert(m_sub_partition[dest_spid]->get_id() == dest_global_spid);
-        if (!m_sub_partition[dest_spid]->dram_L2_queue_full()) {
-          if ((mf_return->get_access_type() == L1_WRBK_ACC) || (mf_return->get_access_type() == L2_WRBK_ACC)) {
-            printf("[PSH_DEBUG] L1_WRBK_ACC in mf_return. uid: %d\n", mf_return->get_request_uid());
-            m_sub_partition[dest_spid]->set_done(mf_return);
-            m_sub_partition[dest_spid]->set_done(*it);
-            it = rdd_returnq->erase(it);
-            delete rdd_mf;
-            delete mf_return;
-          } else {
-            m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
-            mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
-                        m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
-            m_arbitration_metadata.return_credit(dest_spid);
-            m_sub_partition[dest_spid]->set_done(*it); // hojung: rdd_returnq Debugging    
-            it = rdd_returnq->erase(it);
-            delete rdd_mf;
-            MEMPART_DPRINTF(
-                "mem_fetch request %p return from dram to sub partition %d\n",
-                mf_return, dest_spid);
-          }
-          m_dram->return_queue_pop();
-        }
-        break;
-      }
-    }
+    //}
+    //else {
+    //  auto rdd_returnq = m_dram->get_rdd_returnq();
+    //  auto it = rdd_returnq->begin();
+    //  while (it != rdd_returnq->end()){
+    //    mem_fetch *rdd_mf = *it;
+    //    if (mf_return->get_redundancy_pair() != rdd_mf){
+    //        ++it;
+    //        continue;
+    //    }
+    //    unsigned dest_global_spid = mf_return->get_sub_partition_id();
+    //    int dest_spid = global_sub_partition_id_to_local_id(dest_global_spid);
+    //    assert(m_sub_partition[dest_spid]->get_id() == dest_global_spid);
+    //    if (!m_sub_partition[dest_spid]->dram_L2_queue_full()) {
+    //      if ((mf_return->get_access_type() == L1_WRBK_ACC) || (mf_return->get_access_type() == L2_WRBK_ACC)) {
+    //        printf("[PSH_DEBUG] L1_WRBK_ACC in mf_return. uid: %d\n", mf_return->get_request_uid());
+    //        m_sub_partition[dest_spid]->set_done(mf_return);
+    //        m_sub_partition[dest_spid]->set_done(*it);
+    //        it = rdd_returnq->erase(it);
+    //        delete rdd_mf;
+    //        delete mf_return;
+    //      } else {
+    //        m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
+    //        mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
+    //                    m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
+    //        m_arbitration_metadata.return_credit(dest_spid);
+    //        m_sub_partition[dest_spid]->set_done(*it); // hojung: rdd_returnq Debugging    
+    //        it = rdd_returnq->erase(it);
+    //        delete rdd_mf;
+    //        MEMPART_DPRINTF(
+    //            "mem_fetch request %p return from dram to sub partition %d\n",
+    //            mf_return, dest_spid);
+    //      }
+    //      m_dram->return_queue_pop();
+    //    }
+    //    break;
+    //  }
+    //}
   } else {
     m_dram->return_queue_pop();
   }

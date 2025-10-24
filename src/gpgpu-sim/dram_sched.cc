@@ -290,9 +290,9 @@ void dram_t::scheduler_frfcfs() {
         req->data->get_is_redundancy());
         }
       }
-      if((req != nullptr) && (this->id == 0) && (b == 4)) {
-        printf("[PSH_DEBUG] Bank[4] Deteced\n");
-      }
+      //if((req != nullptr) && (this->id == 0) && (b == 4)) {
+      //  printf("[PSH_DEBUG] Bank[4] Deteced\n");
+      //}
 
       if (req) {
         req->data->set_status(IN_PARTITION_MC_BANK_ARB_QUEUE,
