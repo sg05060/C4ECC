@@ -63,7 +63,9 @@ class mem_fetch {
   // sg05060
   mem_fetch(const mem_fetch &other);
   void set_redundancy_pair(mem_fetch *redundancy_rq);
+  void set_is_need_rdd(bool is_need);
   bool get_is_redundancy() const { return is_redundancy; }
+  bool get_is_need_rdd() const { return is_need_rdd; }
   const mem_fetch *get_redundancy_pair() const { return redundancy_pair; }
   unsigned get_rdd_tag() const { return rdd_tag; }
 
@@ -142,6 +144,7 @@ class mem_fetch {
   bool is_redundancy;
   const mem_fetch *redundancy_pair;
   unsigned rdd_tag;
+  bool is_need_rdd;
 
   // request source information
   unsigned m_request_uid;

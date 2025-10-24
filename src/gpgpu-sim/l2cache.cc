@@ -48,6 +48,7 @@
 #include "mem_fetch.h"
 #include "mem_latency_stat.h"
 #include "shader.h"
+#include "rdd_cache.h"
 
 mem_fetch *partition_mf_allocator::alloc(new_addr_type addr,
                                          mem_access_type type, unsigned size,
@@ -83,6 +84,7 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
       m_arbitration_metadata(config),
       m_gpu(gpu) {
   m_dram = new dram_t(m_id, m_config, m_stats, this, gpu);
+  m_rcache = new redundancy_cache(4,2);
 
   m_sub_partition = new memory_sub_partition
       *[m_config->m_n_sub_partition_per_memory_channel];
@@ -331,6 +333,13 @@ void memory_partition_unit::dram_cycle() {
           mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
                                 m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
           m_arbitration_metadata.return_credit(dest_spid);
+
+          //sg05060
+          if(mf_return->get_is_need_rdd()) {
+            m_rcache->processing_mshr(mf_return);
+            m_rcache->update_cache(mf_return);
+          }
+
           MEMPART_DPRINTF(
               "mem_fetch request %p return from dram to sub partition %d\n",
               mf_return, dest_spid);
@@ -434,30 +443,41 @@ void memory_partition_unit::dram_cycle() {
     //sg05060 : Redundancy check 
 
     if(!(mf->get_is_write())) {
-      mem_fetch *rdd_mf = new mem_fetch(*mf);
-      mf->set_redundancy_pair(rdd_mf);
-      rdd_mf->set_redundancy_pair(mf);
-      m_dram->push(mf);
-      if(mf->get_request_uid() == 3828593) {
-        printf("[PSH_DEBUG] Deadlock Requeset Tracking...normal read mf, type: %d\n", mf->get_access_type());
+      RDD_CACHE_STATE rcache_state = m_rcache->access(mf);
+
+      if (rcache_state == RDD_HIT){
+            mf->set_redundancy_pair(nullptr);
+            m_dram->push(mf);
+      }// Redundancy Pending Hit
+      else if (rcache_state == RDD_PENDING_HIT){
+          // redundancy_pair is already set by access func
+          m_dram->push(mf);
+      }// Redundancy Miss
+      else{
+          mem_fetch *rdd_mf = new mem_fetch(*mf);
+          mf->set_redundancy_pair(rdd_mf);
+          mf->set_is_need_rdd(true);
+          rdd_mf->set_redundancy_pair(mf);
+
+          m_rcache->cleanup_invalid_entries();
+          m_rcache->push_mshr(mf);
+          m_dram->push(mf);
+          m_dram->push(rdd_mf);
       }
-      m_dram->push(rdd_mf);
-      if(rdd_mf->get_request_uid() == 3828593) {
-        printf("[PSH_DEBUG] Deadlock Requeset Tracking...rdd read mf, type: %d\n", rdd_mf->get_access_type());
-      }
+
+      //mem_fetch *rdd_mf = new mem_fetch(*mf);
+      //mf->set_redundancy_pair(rdd_mf);
+      //rdd_mf->set_redundancy_pair(mf);
+      //m_dram->push(mf);
+      //m_dram->push(rdd_mf);
+
     } 
     else {
       mem_fetch *rdd_mf = new mem_fetch(*mf);
       mf->set_redundancy_pair(rdd_mf);
       rdd_mf->set_redundancy_pair(mf);
       m_dram->push(mf);
-      if(mf->get_request_uid() == 3828593) {
-        printf("[PSH_DEBUG] Deadlock Requeset Tracking...normal write mf, type: %d\n", mf->get_access_type());
-      }
       m_dram->push(rdd_mf);
-      if(rdd_mf->get_request_uid() == 3828593) {
-        printf("[PSH_DEBUG] Deadlock Requeset Tracking...rdd write mf, type: %d\n", rdd_mf->get_access_type());
-      }
     }
   }
 

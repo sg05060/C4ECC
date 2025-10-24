@@ -39,7 +39,7 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
                      unsigned wid, unsigned sid, unsigned tpc,
                      const memory_config *config, unsigned long long cycle,
                      mem_fetch *m_original_mf, mem_fetch *m_original_wr_mf)
-    : m_access(access), is_redundancy(false), redundancy_pair(nullptr)
+    : m_access(access), is_redundancy(false), is_need_rdd(false), redundancy_pair(nullptr)
 
 {
   m_request_uid = sm_next_mf_request_uid++;
@@ -105,6 +105,7 @@ mem_fetch::mem_fetch(const mem_fetch &other)
   original_wr_mf = other.original_wr_mf;
   rdd_tag = other.rdd_tag;
   is_redundancy = true;
+  is_need_rdd = false;
   redundancy_pair = &other;
 }
 
@@ -112,6 +113,12 @@ mem_fetch::mem_fetch(const mem_fetch &other)
 void mem_fetch::set_redundancy_pair(mem_fetch *redundancy_rq)
 {
   redundancy_pair = redundancy_rq;
+}
+
+// sg05060: Set is_need_rdd
+void mem_fetch::set_is_need_rdd(bool is_need)
+{
+  is_need_rdd = is_need;
 }
 
 

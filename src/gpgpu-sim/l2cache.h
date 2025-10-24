@@ -121,6 +121,7 @@ class memory_partition_unit {
   class memory_stats_t *m_stats;
   class memory_sub_partition **m_sub_partition;
   class dram_t *m_dram;
+  class redundancy_cache *m_rcache;
 
   class arbitration_metadata {
    public:
