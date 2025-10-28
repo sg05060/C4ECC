@@ -84,7 +84,14 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
       m_arbitration_metadata(config),
       m_gpu(gpu) {
   m_dram = new dram_t(m_id, m_config, m_stats, this, gpu);
-  m_rcache = new redundancy_cache(4,2);
+  m_rcache = new redundancy_cache(8,4);
+  m_bdi = new comp::BDI(32);
+  m_cpack = new comp::CPACK(32);
+  m_bpc = new comp::BPC(32);
+  m_custom_bpc = new comp::CustomBPC(32);
+
+  m_compress_fail = 0;
+  m_compress_success = 0;
 
   m_sub_partition = new memory_sub_partition
       *[m_config->m_n_sub_partition_per_memory_channel];
@@ -108,6 +115,44 @@ void memory_partition_unit::handle_memcpy_to_gpu(
       addr, p, global_subpart_id, mystring.c_str());
   m_sub_partition[p]->force_l2_tag_update(
       addr, m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, mask);
+}
+
+//sg05060
+void memory_partition_unit::record_h2d_comp_line_result(size_t addr, bool is_comp) {
+  if(is_comp) {
+    m_compress_success++;
+  }
+  else {
+    m_compress_fail++;
+  }
+  m_comp_table.set(addr, is_comp);
+}
+
+//sg05060
+bool memory_partition_unit::compress32B_and_record(size_t addr, const uint8_t* line) {
+  // FIXME
+  std::vector<uint8_t> line32B(line, line + 32);
+  double ratio_bdi = m_bdi->CompressLine(line32B);
+  double ratio_cpack = m_cpack->CompressLine(line32B);
+  double ratio_bpc = m_bpc->CompressLine(line32B);
+  double ratio_custom_bpc = m_custom_bpc->CompressLine(line32B);
+  double cThresh = 256.0 / 238.0;
+  bool success = (ratio_bdi >= cThresh) || (ratio_cpack >= cThresh) || (ratio_bpc >= cThresh) || (ratio_custom_bpc >= cThresh);
+  
+  m_comp_table.set(addr, success);
+  
+  // Debug
+  // printf("[COMPDBG] part=%u addr=0x%zx line=",
+  //        m_id, addr);
+  // for (int i = 0; i < 32; ++i) {
+  //   printf("%02X", (unsigned)line[i]);
+  //   if ((i & 7) == 7) printf(" "); // 8B 단위 구분용 공백
+  // }
+  // printf(" | BDI: ratio=%.3f CPACK: ratio=%.3f BPC: ratio=%.3f CustomBPC: ratio=%.3f -> %s\n",
+  //        ratio_bdi, ratio_cpack, ratio_bpc, ratio_custom_bpc,
+  //        success ? "PASS(<=30B)" : "FAIL(>30B)");
+  
+  return success;
 }
 
 memory_partition_unit::~memory_partition_unit() {
@@ -473,6 +518,7 @@ void memory_partition_unit::dram_cycle() {
 
     } 
     else {
+
       mem_fetch *rdd_mf = new mem_fetch(*mf);
       mf->set_redundancy_pair(rdd_mf);
       rdd_mf->set_redundancy_pair(mf);
@@ -484,30 +530,7 @@ void memory_partition_unit::dram_cycle() {
   // sg05060: Debug
   if(m_id == 0) {
     if((m_gpu->gpu_sim_cycle % 5000 == 0) || (m_gpu->gpu_sim_cycle % 5001 == 0) || (m_gpu->gpu_sim_cycle % 5002 == 0)) {
-      debug_dump_dram_queues();
-      /*
-      printf("\n===== Pending tracker dump @ cycle=%llu (mem_part=%u) =====\n", m_gpu->gpu_sim_cycle, m_id);
-      for (unsigned p = 0; p < m_config->m_n_sub_partition_per_memory_channel; ++p) {
-        const std::set<mem_fetch *> &pend = m_sub_partition[p]->get_request_tracker();
-        if (pend.empty()) continue;
-        for (std::set<mem_fetch *>::const_iterator it = pend.begin();
-          it != pend.end(); ++it) {
-          mem_fetch *mf = *it;
-          if (!mf) continue;
-
-          // 이미 l2cache.cc에 있는 헬퍼 재사용 (없으면 간단히 대체)
-          // static inline const char* yesno(bool v);
-          // static inline unsigned pair_uid(const mem_fetch* mf);
-          printf("  uid=%u | type=%d | wr=%s | spid=%d | pair=%u | addr=0x%012llx\n",
-                mf->get_request_uid(),
-                (int)mf->get_access_type(),
-                yesno(mf->is_write()),
-                mf->get_sub_partition_id(),
-                pair_uid(mf),
-                (unsigned long long)mf->get_addr());
-        }
-      }
-      */
+      //debug_dump_dram_queues();
     }
   }
 }
@@ -598,6 +621,11 @@ void memory_partition_unit::print(FILE *fp) const {
        p++) {
     m_sub_partition[p]->print(fp);
   }
+
+  //sg05060
+  double compression_coverage = m_compress_success / (m_compress_success + m_compress_fail);
+  fprintf(fp, "Memory Partition %u Compression Coverage %f: \n", m_id, compression_coverage);
+
   fprintf(fp, "In Dram Latency Queue (total = %zd): \n",
           m_dram_latency_queue.size());
   for (std::list<dram_delay_t>::const_iterator mf_dlq =

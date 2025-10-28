@@ -35,6 +35,15 @@
 #include "../abstract_hardware_model.h"
 #include "dram.h"
 
+#include "BDI.h"
+#include "CPACK.h"
+#include "BPC.h"
+#include "CustomBPC.h"
+//#include "Compressor.h"
+//#include "CompResult.h"
+
+#include "CompTable.h"
+
 #include <list>
 #include <queue>
 
@@ -115,6 +124,10 @@ class memory_partition_unit {
   //static inline const char* yesno(bool v);
   //static inline unsigned pair_uid(const mem_fetch* mf);
 
+  //sg05060
+  void record_h2d_comp_line_result(size_t addr, bool is_comp);
+  bool compress32B_and_record(size_t addr, const uint8_t* line);
+
  private:
   unsigned m_id;
   const memory_config *m_config;
@@ -122,6 +135,16 @@ class memory_partition_unit {
   class memory_sub_partition **m_sub_partition;
   class dram_t *m_dram;
   class redundancy_cache *m_rcache;
+  
+  //sg05060: compressor
+  comp::BDI* m_bdi;
+  comp::CPACK* m_cpack;
+  comp::BPC* m_bpc;
+  comp::CustomBPC* m_custom_bpc;
+
+  int m_compress_fail;
+  int m_compress_success;
+  CompInfoTable m_comp_table;
 
   class arbitration_metadata {
    public:

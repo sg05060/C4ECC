@@ -631,6 +631,9 @@ class gpgpu_sim : public gpgpu_t {
   void dump_pipeline(int mask, int s, int m) const;
 
   void perf_memcpy_to_gpu(size_t dst_start_addr, size_t count);
+  //sg05060
+  void notify_h2d_comp_line_result(size_t addr, bool is_comp);
+  memory_partition_unit* get_memory_partition(unsigned i) { return m_memory_partition_unit[i]; }
 
   // The next three functions added to be used by the functional simulation
   // function

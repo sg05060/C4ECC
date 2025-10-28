@@ -2248,6 +2248,17 @@ void gpgpu_sim::perf_memcpy_to_gpu(size_t dst_start_addr, size_t count) {
   }
 }
 
+//sg05060
+void gpgpu_sim::notify_h2d_comp_line_result(size_t addr, bool is_comp) {
+  addrdec_t raw_addr;
+  m_memory_config->m_address_mapping.addrdec_tlx(addr, &raw_addr);
+  unsigned part = raw_addr.sub_partition /
+        m_memory_config->m_n_sub_partition_per_memory_channel; // 채널/파티션
+  // 필요하면 sub-partition도 계산 (채널당 N개인 경우)
+
+  m_memory_partition_unit[part]->record_h2d_comp_line_result(addr, is_comp);
+}
+
 void gpgpu_sim::dump_pipeline(int mask, int s, int m) const {
   /*
      You may want to use this function while running GPGPU-Sim in gdb.

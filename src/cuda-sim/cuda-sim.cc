@@ -56,6 +56,8 @@ typedef void *yyscan_t;
 #include "ptx_parser.h"
 #include "ptx_sim.h"
 
+#include "../gpgpu-sim/l2cache.h"
+
 int g_debug_execution = 0;
 // Output debug information to file options
 
@@ -486,6 +488,24 @@ void gpgpu_t::memcpy_to_gpu(size_t dst_start_addr, const void *src,
   char *src_data = (char *)src;
   for (unsigned n = 0; n < count; n++)
     m_global_mem->write(dst_start_addr + n, 1, src_data + n, NULL, NULL);
+
+  //sg05060 : data compression on memcpy data
+  gpgpu_sim* sim = gpgpu_ctx->the_gpgpusim->g_the_gpu;
+  const memory_config* cfg = sim->getMemoryConfig();
+  const uint8_t* src_bytes = static_cast<const uint8_t*>(src);
+  for (size_t off = 0; off < count; off += 32) {
+    size_t a = dst_start_addr + off;
+
+    addrdec_t raw;
+    cfg->m_address_mapping.addrdec_tlx(a, &raw);
+    unsigned part = raw.sub_partition / cfg->m_n_sub_partition_per_memory_channel;
+
+    bool is_comp;
+    const uint8_t* line = src_bytes + off;
+    auto* m_memory_partition_unit = sim->get_memory_partition(part);
+    is_comp = m_memory_partition_unit->compress32B_and_record(a, line);
+    //m_memory_partition_unit->record_h2d_comp_line_result(dst_start_addr + off, is_comp);
+  }
 
   // Copy into the performance model.
   // extern gpgpu_sim* g_the_gpu;
