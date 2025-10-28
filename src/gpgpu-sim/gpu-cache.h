@@ -82,6 +82,7 @@ enum cache_gpu_level {
 struct evicted_block_info {
   new_addr_type m_block_addr;
   unsigned m_modified_size;
+  unsigned char m_data[128];//sg05060
   mem_access_byte_mask_t m_byte_mask;
   mem_access_sector_mask_t m_sector_mask;
   evicted_block_info() {
@@ -139,6 +140,13 @@ struct cache_block_t {
   virtual bool is_reserved_line() = 0;
   virtual bool is_modified_line() = 0;
 
+  //sg05060
+  virtual void clear_data(unsigned cache_index) = 0;
+  virtual void set_data(unsigned cache_index,
+                        mem_access_sector_mask_t sector_mask,
+                        unsigned char *input_data,
+                        unsigned data_size) = 0;
+
   virtual enum cache_block_state get_status(
       mem_access_sector_mask_t sector_mask) = 0;
   virtual void set_status(enum cache_block_state m_status,
@@ -167,6 +175,8 @@ struct cache_block_t {
 
   new_addr_type m_tag;
   new_addr_type m_block_addr;
+  public:
+    unsigned char m_data[128];
 };
 
 struct line_cache_block : public cache_block_t {
@@ -209,6 +219,15 @@ struct line_cache_block : public cache_block_t {
   virtual bool is_valid_line() { return m_status == VALID; }
   virtual bool is_reserved_line() { return m_status == RESERVED; }
   virtual bool is_modified_line() { return m_status == MODIFIED; }
+
+  //sg05060
+  virtual void clear_data(unsigned cache_index) { memset(m_data, 0, 128); }
+  virtual void set_data(unsigned cache_index,
+                        mem_access_sector_mask_t sector_mask,
+                        unsigned char *input_data, unsigned data_size)  // song
+  {
+    memcpy(m_data, input_data, 128);
+  }
 
   virtual enum cache_block_state get_status(
       mem_access_sector_mask_t sector_mask) {
@@ -405,6 +424,20 @@ struct sector_cache_block : public cache_block_t {
     unsigned sidx = get_sector_index(sector_mask);
 
     return m_status[sidx];
+  }
+
+  //sg05060
+  virtual void set_data(unsigned cache_index,
+                        mem_access_sector_mask_t sector_mask,
+                        unsigned char *input_data, unsigned data_size) {
+    unsigned sidx = get_sector_index(sector_mask);
+    // printf("memcpy to cache_index %d sector_index %d data_size %d
+    // \n",cache_index, sidx,data_size);
+   // printf("set_data, sidx %d ,data size %d\n",sidx,data_size);
+    memcpy(m_data + sidx * SECTOR_SIZE, input_data, data_size);
+  }
+  virtual void clear_data(unsigned cache_index) {
+    memset(m_data, -2, 128);
   }
 
   virtual void set_status(enum cache_block_state status,

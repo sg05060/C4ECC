@@ -121,6 +121,24 @@ void mem_fetch::set_is_need_rdd(bool is_need)
   is_need_rdd = is_need;
 }
 
+//sg05060: Print Wdata
+void mem_fetch::print_data() {
+  if(m_type == WRITE_REQUEST) {
+    printf("Write Data | 0x");
+    for (int j = 0; j < 4; j++) {
+      for (int i = 32*j; i < 32*j+32 ; i++)
+         printf("%02x,", data[i]);
+       printf("\n");
+    }
+  }
+}
+
+//sg05060: Write Data
+void mem_fetch::write_data(unsigned char *input_data) {
+  memcpy(data, input_data , get_data_size());
+}
+
+
 
 #define MF_TUP_BEGIN(X) static const char *Status_str[] = {
 #define MF_TUP(X) #X

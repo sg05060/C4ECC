@@ -68,6 +68,8 @@ class mem_fetch {
   bool get_is_need_rdd() const { return is_need_rdd; }
   const mem_fetch *get_redundancy_pair() const { return redundancy_pair; }
   unsigned get_rdd_tag() const { return rdd_tag; }
+  void print_data();
+  void write_data(unsigned char* input_data);
 
   void set_status(enum mem_fetch_status status, unsigned long long cycle);
   void set_reply() {
@@ -139,6 +141,9 @@ class mem_fetch {
   mem_fetch *get_original_mf() { return original_mf; }
   mem_fetch *get_original_wr_mf() { return original_wr_mf; }
 
+ public://sg05060
+ unsigned char data[128];
+ 
  private:
   // sg05060
   bool is_redundancy;

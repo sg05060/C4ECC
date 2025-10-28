@@ -4640,6 +4640,16 @@ void simt_core_cluster::icnt_inject_request_packet(class mem_fetch *mf) {
   unsigned destination = mf->get_sub_partition_id();
   mf->set_status(IN_ICNT_TO_MEM,
                  m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
+
+  // sg05060
+  unsigned char buffer[128];
+  unsigned core_local_id = mf->get_sid() % m_config->n_simt_cores_per_cluster;
+  shader_core_ctx *core = m_core[core_local_id];
+  core->get_gpu()->get_global_memory()->read(mf->get_addr(), mf->get_data_size(), buffer);
+  mf->write_data(buffer);
+  //mf->print_data();
+
+
   if (!mf->get_is_write() && !mf->isatomic())
     ::icnt_push(m_cluster_id, m_config->mem2device(destination), (void *)mf,
                 mf->get_ctrl_size());

@@ -140,7 +140,7 @@ bool memory_partition_unit::compress32B_and_record(size_t addr, const uint8_t* l
   bool success = (ratio_bdi >= cThresh) || (ratio_cpack >= cThresh) || (ratio_bpc >= cThresh) || (ratio_custom_bpc >= cThresh);
   
   m_comp_table.set(addr, success);
-  
+
   // Debug
   // printf("[COMPDBG] part=%u addr=0x%zx line=",
   //        m_id, addr);
@@ -485,9 +485,9 @@ void memory_partition_unit::dram_cycle() {
     mem_fetch *mf = m_dram_latency_queue.front().req;
     m_dram_latency_queue.pop_front();
     //m_dram->push(mf);
-    //sg05060 : Redundancy check 
 
-    if(!(mf->get_is_write())) {
+    //sg05060 : Redundancy check 
+    if(!(mf->get_is_write())) { // Read Path
       RDD_CACHE_STATE rcache_state = m_rcache->access(mf);
 
       if (rcache_state == RDD_HIT){
@@ -517,8 +517,13 @@ void memory_partition_unit::dram_cycle() {
       //m_dram->push(rdd_mf);
 
     } 
-    else {
+    else { // Write Path
 
+      unsigned req_size = mf->get_data_size();
+      for(int i = 0; i < (req_size/32); i++) {
+        
+      }
+  
       mem_fetch *rdd_mf = new mem_fetch(*mf);
       mf->set_redundancy_pair(rdd_mf);
       rdd_mf->set_redundancy_pair(mf);

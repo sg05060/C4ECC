@@ -1252,8 +1252,15 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time) {
   assert(e->second.m_valid);
   mf->set_data_size(e->second.m_data_size);
   mf->set_addr(e->second.m_addr);
-  if (m_config.m_alloc_policy == ON_MISS)
+
+  //sg05060
+  cache_block_t *block = m_tag_array->get_block(e->second.m_cache_index);
+
+  if (m_config.m_alloc_policy == ON_MISS) {
     m_tag_array->fill(e->second.m_cache_index, time, mf);
+    block->set_data(e->second.m_cache_index, mf->get_access_sector_mask(),
+                    mf->data, mf->get_data_size());  //sg05060
+  }
   else if (m_config.m_alloc_policy == ON_FILL) {
     m_tag_array->fill(e->second.m_block_addr, time, mf, mf->is_write());
   } else
@@ -1269,6 +1276,8 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time) {
     block->set_status(MODIFIED,
                       mf->get_access_sector_mask());  // mark line as dirty for
                                                       // atomic operation
+    block->set_data(e->second.m_cache_index, mf->get_access_sector_mask(),
+                    mf->data, mf->get_data_size());  //sg05060                                                  
     block->set_byte_mask(mf);
   }
   m_extra_mf_fields.erase(mf);
@@ -1440,6 +1449,8 @@ cache_request_status data_cache::wr_hit_wb(new_addr_type addr,
     m_tag_array->inc_dirty();
   }
   block->set_status(MODIFIED, mf->get_access_sector_mask());
+  block->set_data(cache_index, mf->get_access_sector_mask(), mf->data,
+                  mf->get_data_size());//sg05060
   block->set_byte_mask(mf);
   update_m_readable(mf, cache_index);
 
@@ -1759,6 +1770,13 @@ enum cache_request_status data_cache::wr_miss_wa_lazy_fetch_on_read(
   }
   block->set_status(MODIFIED, mf->get_access_sector_mask());
   block->set_byte_mask(mf);
+
+  //sg05060
+  memcpy(evicted.m_data, block->m_data, 128);
+  block->clear_data(cache_index);
+  block->set_data(cache_index, mf->get_access_sector_mask(), mf->data,
+                  mf->get_data_size());
+
   if (m_status == HIT_RESERVED) {
     block->set_ignore_on_fill(true, mf->get_access_sector_mask());
     block->set_modified_on_fill(true, mf->get_access_sector_mask());
@@ -1831,6 +1849,8 @@ enum cache_request_status data_cache::rd_hit_base(
     }
     block->set_status(MODIFIED,
                       mf->get_access_sector_mask());  // mark line as
+    block->set_data(cache_index, mf->get_access_sector_mask(), mf->data,
+                    mf->get_data_size()); //sg05060
     block->set_byte_mask(mf);
   }
   return HIT;
@@ -1858,6 +1878,11 @@ enum cache_request_status data_cache::rd_miss_base(
   send_read_request(addr, block_addr, cache_index, mf, time, do_miss, wb,
                     evicted, events, false, false);
 
+  //sg05060
+  cache_block_t *block = m_tag_array->get_block(cache_index);
+  memcpy(evicted.m_data, block->m_data, 128);
+  block->clear_data(cache_index);
+
   if (do_miss) {
     // If evicted block is modified and not a write-through
     // (already modified lower level)
@@ -1867,6 +1892,11 @@ enum cache_request_status data_cache::rd_miss_base(
           evicted.m_byte_mask, evicted.m_sector_mask, evicted.m_modified_size,
           true, m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle, -1, -1, -1,
           NULL, mf->get_streamID());
+
+      //sg05060
+      memcpy(wb->data, evicted.m_data, 128);
+      memcpy(wb->data, evicted.m_data, SECTOR_SIZE * SECTOR_CHUNCK_SIZE);
+
       // the evicted block may have wrong chip id when advanced L2 hashing  is
       // used, so set the right chip address from the original mf
       wb->set_chip(mf->get_tlx_addr().chip);
