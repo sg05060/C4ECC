@@ -138,7 +138,22 @@ bool memory_partition_unit::compress32B_and_record(size_t addr, const uint8_t* l
   double ratio_custom_bpc = m_custom_bpc->CompressLine(line32B);
   double cThresh = 256.0 / 238.0;
   bool success = (ratio_bdi >= cThresh) || (ratio_cpack >= cThresh) || (ratio_bpc >= cThresh) || (ratio_custom_bpc >= cThresh);
-  
+  if(success) {
+    m_compress_success++;
+  }
+  else {
+    m_compress_fail++;
+    // Debug
+     printf("[COMPDBG] part=%u addr=0x%zx line=",
+            m_id, addr);
+     for (int i = 0; i < 32; ++i) {
+       printf("%02X", (unsigned)line[i]);
+       if ((i & 7) == 7) printf(" "); // 8B 단위 구분용 공백
+     }
+     printf(" | BDI: ratio=%.3f CPACK: ratio=%.3f BPC: ratio=%.3f CustomBPC: ratio=%.3f -> %s\n",
+            ratio_bdi, ratio_cpack, ratio_bpc, ratio_custom_bpc,
+            success ? "PASS(<=30B)" : "FAIL(>30B)");
+  }
   m_comp_table.set(addr, success);
 
   // Debug
@@ -518,12 +533,17 @@ void memory_partition_unit::dram_cycle() {
 
     } 
     else { // Write Path
-
-      unsigned req_size = mf->get_data_size();
-      for(int i = 0; i < (req_size/32); i++) {
-        
+      //sg05060
+      auto mask = mf->get_access_sector_mask();
+      if(mask.any()) {
+        for(int s = 0; s < 4; s++) {
+          if (!mask.test(s)) continue;
+          const uint8_t* base = reinterpret_cast<const uint8_t*>(mf->data);
+          const size_t sector_addr = static_cast<size_t>(mf->get_addr()) + s * SECTOR_SIZE;
+          const uint8_t* line = base + s * SECTOR_SIZE;
+          compress32B_and_record(sector_addr, line);
+        }
       }
-  
       mem_fetch *rdd_mf = new mem_fetch(*mf);
       mf->set_redundancy_pair(rdd_mf);
       rdd_mf->set_redundancy_pair(mf);
@@ -627,9 +647,12 @@ void memory_partition_unit::print(FILE *fp) const {
     m_sub_partition[p]->print(fp);
   }
 
-  //sg05060
-  double compression_coverage = m_compress_success / (m_compress_success + m_compress_fail);
-  fprintf(fp, "Memory Partition %u Compression Coverage %f: \n", m_id, compression_coverage);
+  //sg05060: FIXME
+  if((m_compress_success + m_compress_fail) != 0) {
+    double compression_coverage = (double)m_compress_success / (m_compress_success + m_compress_fail);
+    fprintf(fp, "Memory Partition %u | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            m_id, compression_coverage, m_compress_success, m_compress_fail);
+  }
 
   fprintf(fp, "In Dram Latency Queue (total = %zd): \n",
           m_dram_latency_queue.size());

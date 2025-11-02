@@ -4647,8 +4647,6 @@ void simt_core_cluster::icnt_inject_request_packet(class mem_fetch *mf) {
   shader_core_ctx *core = m_core[core_local_id];
   core->get_gpu()->get_global_memory()->read(mf->get_addr(), mf->get_data_size(), buffer);
   mf->write_data(buffer);
-  //mf->print_data();
-
 
   if (!mf->get_is_write() && !mf->isatomic())
     ::icnt_push(m_cluster_id, m_config->mem2device(destination), (void *)mf,
