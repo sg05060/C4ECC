@@ -54,6 +54,9 @@ class dram_req_t {
  public:
   dram_req_t(class mem_fetch *data, unsigned banks,
              unsigned dram_bnk_indexing_policy, class gpgpu_sim *gpu);
+  
+  //sg05060:251103_RMW
+  dram_req_t(const dram_req_t &other, mem_fetch* mf);
 
   unsigned int row;
   unsigned int col;
@@ -152,6 +155,10 @@ class dram_t {
     returnq->debug_collect(out);
   }
   unsigned debug_returnq_count() const { return returnq->debug_count(); }
+
+  //sg05060:251103_RMW
+  struct dram_req_t* spawn_shadow_req(const struct dram_req_t* wr_orig, unsigned rmw_id, bool is_write);
+
  private:
   bankgrp_t **bkgrp;
 

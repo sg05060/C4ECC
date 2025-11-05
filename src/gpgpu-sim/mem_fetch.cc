@@ -40,7 +40,7 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
                      const memory_config *config, unsigned long long cycle,
                      mem_fetch *m_original_mf, mem_fetch *m_original_wr_mf)
     : m_access(access), is_redundancy(false), is_need_rdd(false), redundancy_pair(nullptr)
-
+    , rmw_state(RMW_NONE), is_rmw_shadow_rd(false), is_rmw_internal(false), rmw_id(0), rmw_parent(nullptr)
 {
   m_request_uid = sm_next_mf_request_uid++;
   m_access = access;
@@ -107,6 +107,11 @@ mem_fetch::mem_fetch(const mem_fetch &other)
   is_redundancy = true;
   is_need_rdd = false;
   redundancy_pair = &other;
+  rmw_state = other.rmw_state;
+  is_rmw_shadow_rd = other.is_rmw_shadow_rd; 
+  is_rmw_internal = other.is_rmw_internal;
+  rmw_id = other.rmw_id; 
+  rmw_parent = other.rmw_parent;
 }
 
 // sg05060: Set Redundancy Pair
@@ -137,8 +142,6 @@ void mem_fetch::print_data() {
 void mem_fetch::write_data(unsigned char *input_data) {
   memcpy(data, input_data , get_data_size());
 }
-
-
 
 #define MF_TUP_BEGIN(X) static const char *Status_str[] = {
 #define MF_TUP(X) #X

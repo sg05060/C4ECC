@@ -40,6 +40,15 @@ enum mf_type {
   WRITE_ACK
 };
 
+//sg05060:251103_RMW
+enum rmw_state_t {
+  RMW_NONE = 0,       // RMW 아님(기본)
+  RMW_WAIT_RD,        // shadow READ 완료 대기
+  RMW_WAIT_WR_RDD,    // shadow WRITE(redundancy) 완료 대기
+  RMW_READY_ORIG,     // 원본 WR을 이제 스케줄해도 됨
+  RMW_DONE
+};
+
 #define MF_TUP_BEGIN(X) enum X {
 #define MF_TUP(X) X
 #define MF_TUP_END(X) \
@@ -140,16 +149,38 @@ class mem_fetch {
 
   mem_fetch *get_original_mf() { return original_mf; }
   mem_fetch *get_original_wr_mf() { return original_wr_mf; }
+  
+  //sg05060:251103_RMW
+  void        set_rmw_state(rmw_state_t s) { rmw_state = s; }
+  rmw_state_t get_rmw_state() const { return rmw_state; }
+  bool        is_rmw_shadow_read() const  { return is_rmw_shadow_rd; }
+  bool        is_rmw_internal_req() const { return is_rmw_internal; }
+  unsigned    get_rmw_id() const { return rmw_id; }
+  void        set_rmw_id(unsigned id)  { rmw_id = id; }
+  mem_fetch*  get_rmw_parent() const { return rmw_parent; }
+  void        mark_rmw_shadow(bool is_write, unsigned id, mem_fetch* parent){
+    is_rmw_shadow_rd = !is_write; 
+    is_rmw_internal = true;
+    rmw_id = id; 
+    rmw_parent = parent;
+  }
 
  public://sg05060
  unsigned char data[128];
- 
+
  private:
   // sg05060
   bool is_redundancy;
   const mem_fetch *redundancy_pair;
   unsigned rdd_tag;
   bool is_need_rdd;
+
+  //sg05060:251103_RMW
+  rmw_state_t rmw_state;
+  bool is_rmw_shadow_rd;
+  bool is_rmw_internal;
+  unsigned rmw_id;
+  mem_fetch* rmw_parent;
 
   // request source information
   unsigned m_request_uid;

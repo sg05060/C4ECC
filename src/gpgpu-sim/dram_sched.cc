@@ -84,12 +84,12 @@ void frfcfs_scheduler::add_req(dram_req_t *req) {
     std::list<dram_req_t *>::iterator ptr = m_queue[req->bk].begin();
     m_bins[req->bk][req->row].push_front(ptr);  // newest reqs to the front
     //sg05060
-    if(req) {
-      if(req->data->get_request_uid() == 3828593) {
-        printf("[PSH_DEBUG] sched->add_req in scheduler. uid : %d, is_redun : %d, bk : %d, row : %d, is_write : %d\n",req->data->get_request_uid(), 
-        req->data->get_is_redundancy(), req->bk, req->row, req->data->is_write());
-      }
-    }
+    //if(req) {
+    //  if(req->data->get_request_uid() == 3828593) {
+    //    printf("[PSH_DEBUG] sched->add_req in scheduler. uid : %d, is_redun : %d, bk : %d, row : %d, is_write : %d\n",req->data->get_request_uid(), 
+    //    req->data->get_is_redundancy(), req->bk, req->row, req->data->is_write());
+    //  }
+    //}
   }
 }
 
@@ -201,6 +201,47 @@ dram_req_t *frfcfs_scheduler::schedule(unsigned bank, unsigned curr_row) {
   std::list<dram_req_t *>::iterator next = m_current_last_row[bank]->back();
   dram_req_t *req = (*next);
 
+  //sg05060:251103_RMW
+  if(req && req->data) {
+    mem_fetch* pending_mf = req->data;
+    if(pending_mf->is_write() && pending_mf->get_is_need_rdd()) {
+      rmw_state_t st = pending_mf->get_rmw_state();
+        if (st == RMW_WAIT_RD) {
+          return NULL;
+        } 
+        else if(st == RMW_WAIT_WR_RDD) {
+          pending_mf->set_rmw_state(RMW_READY_ORIG);
+          auto *shadow_wr_req = m_dram->spawn_shadow_req(req, pending_mf->get_rmw_id(), 1);
+          //printf("[RMW][spawn] parent=%p shadow=%p rmw_id=%u\n",
+          //      req->data, shadow_wr_req->data, pending_mf->get_rmw_id());
+          //printf("    flags: internal=%d srd=%d parent_set=%d\n",
+          //      (int)shadow_wr_req->data->is_rmw_internal_req(),
+          //      (int)shadow_wr_req->data->is_rmw_shadow_read(),
+          //      (shadow_wr_req->data->get_rmw_parent()!=nullptr));
+          assert(shadow_wr_req->data->get_rmw_parent());
+          return shadow_wr_req;
+        } 
+        else if(st == RMW_NONE) {
+          static unsigned rmw_seq_num = 1u;
+          unsigned rmw_id = rmw_seq_num++;
+          pending_mf->set_rmw_state(RMW_WAIT_RD);
+          pending_mf->set_rmw_id(rmw_id);
+          auto *shadow_rd_req = m_dram->spawn_shadow_req(req, rmw_id, 0);
+          //printf("[RMW][spawn] parent=%p shadow=%p rmw_id=%u\n",
+          //      req->data, shadow_rd_req->data, rmw_id);
+          //printf("    flags: internal=%d srd=%d parent_set=%d\n",
+          //      (int)shadow_rd_req->data->is_rmw_internal_req(),
+          //      (int)shadow_rd_req->data->is_rmw_shadow_read(),
+          //      (shadow_rd_req->data->get_rmw_parent()!=nullptr));
+          assert(shadow_rd_req->data->get_rmw_parent());
+          return shadow_rd_req;
+        } 
+        else if(st == RMW_READY_ORIG) {
+          //continue;
+        }
+    }
+  }
+
   // rowblp stats
   m_dram->access_num++;
   bool is_write = req->data->is_write();
@@ -256,10 +297,10 @@ void dram_t::scheduler_frfcfs() {
     dram_req_t *req = mrqq->pop();
     
     //sg05060
-    if(req->data->get_request_uid() == 3828593) {
-      printf("[PSH_DEBUG] mrqq->pop in scheduler. uid : %d, is_redun : %d\n",req->data->get_request_uid(), 
-      req->data->get_is_redundancy());
-    }
+    //if(req->data->get_request_uid() == 3828593) {
+    //  printf("[PSH_DEBUG] mrqq->pop in scheduler. uid : %d, is_redun : %d\n",req->data->get_request_uid(), 
+    //  req->data->get_is_redundancy());
+    //}
 
     // Power stats
     // if(req->data->get_type() != READ_REPLY && req->data->get_type() !=
@@ -284,12 +325,12 @@ void dram_t::scheduler_frfcfs() {
     if (!bk[b]->mrq) {
       req = sched->schedule(b, bk[b]->curr_row);
       //sg05060
-      if(req != nullptr) {
-        if(req->data->get_request_uid() == 3828593) {
-        printf("[PSH_DEBUG] sched->pop in scheduler. uid : %d, is_redun : %d\n",req->data->get_request_uid(), 
-        req->data->get_is_redundancy());
-        }
-      }
+      //if(req != nullptr) {
+      //  if(req->data->get_request_uid() == 3828593) {
+      //  printf("[PSH_DEBUG] sched->pop in scheduler. uid : %d, is_redun : %d\n",req->data->get_request_uid(), 
+      //  req->data->get_is_redundancy());
+      //  }
+      //}
       //if((req != nullptr) && (this->id == 0) && (b == 4)) {
       //  printf("[PSH_DEBUG] Bank[4] Deteced\n");
       //}

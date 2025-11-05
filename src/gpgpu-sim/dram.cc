@@ -214,6 +214,16 @@ unsigned int dram_t::queue_limit() const {
   return m_config->gpgpu_frfcfs_dram_sched_queue_size;
 }
 
+// sg05060:251103_RMW
+dram_req_t* dram_t::spawn_shadow_req(const struct dram_req_t* wr_orig, unsigned rmw_id, bool is_write) {
+  mem_fetch* wr_orig_mf = wr_orig->data;
+  mem_fetch *shadow_mf = new mem_fetch(*wr_orig_mf);
+  shadow_mf->mark_rmw_shadow(is_write, rmw_id, wr_orig_mf);
+  dram_req_t* shadow_req = new dram_req_t(*wr_orig, shadow_mf);
+  assert(shadow_req->data->get_rmw_parent());
+  return shadow_req;
+}
+
 dram_req_t::dram_req_t(class mem_fetch *mf, unsigned banks,
                        unsigned dram_bnk_indexing_policy,
                        class gpgpu_sim *gpu) {
@@ -264,6 +274,25 @@ dram_req_t::dram_req_t(class mem_fetch *mf, unsigned banks,
   addr = mf->get_addr();
   insertion_time = (unsigned)m_gpu->gpu_sim_cycle;
   rw = data->get_is_write() ? WRITE : READ;
+}
+
+
+//sg05060:251103_RMW
+dram_req_t::dram_req_t(const dram_req_t &other, mem_fetch* mf)
+{
+  row             = other.row;
+  col             = other.col;
+  bk              = other.bk;
+  nbytes          = other.nbytes;
+  txbytes         = other.txbytes;
+  dqbytes         = other.dqbytes;
+  age             = other.age;
+  timestamp       = other.timestamp;
+  rw              = other.rw;  // is the request a read or a write?
+  addr            = other.addr;
+  insertion_time  = other.insertion_time;
+  data            = mf;
+  m_gpu           = other.m_gpu;
 }
 
 void dram_t::push(class mem_fetch *data) {
@@ -321,25 +350,48 @@ void dram_t::cycle() {
 
       if (cmd->dqbytes >= cmd->nbytes) {
         mem_fetch *data = cmd->data;
-        data->set_status(IN_PARTITION_MC_RETURNQ,
-                         m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
-        if (data->get_access_type() != L1_WRBK_ACC &&
-            data->get_access_type() != L2_WRBK_ACC) {
-          data->set_reply();
-          //returnq->push(data);
-          //sg05060: Redundancy->rdd_returnq & Data->returnq
-          if(data->get_is_redundancy()) {
-            //rdd_returnq->push_back(data);
+
+        //sg05060:251103_RMW
+        if(data->is_rmw_internal_req()) {
+          if(data->is_rmw_shadow_read()) {
+            assert(data->get_rmw_parent());
+            //printf("[RMW][shadow_rd_finish] parent=%p shadow=%p rmw_id=%u\n",
+            //      data->get_rmw_parent(), data, data->get_rmw_id());
+            //printf("    flags: internal=%d srd=%d parent_set=%d\n",
+            //      (int)data->is_rmw_internal_req(),
+            //      (int)data->is_rmw_shadow_read(),
+            //      (data->get_rmw_parent()!=nullptr));
+            mem_fetch* parent = data->get_rmw_parent();
+            if(parent) {
+              parent->set_rmw_state(RMW_WAIT_WR_RDD);
+            } else {
+              assert(0);
+            }
+            delete data;
+            delete cmd;
+          }
+        }
+        else {
+          data->set_status(IN_PARTITION_MC_RETURNQ,
+                          m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
+          if (data->get_access_type() != L1_WRBK_ACC &&
+              data->get_access_type() != L2_WRBK_ACC) {
+            data->set_reply();
+            //returnq->push(data);
+            //sg05060: Redundancy->rdd_returnq & Data->returnq
+            if(data->get_is_redundancy()) {
+              //rdd_returnq->push_back(data);
+              delete data;
+            }
+            else {
+              returnq->push(data);
+            }
+          } else {
+            m_memory_partition_unit->set_done(data);
             delete data;
           }
-          else {
-            returnq->push(data);
-          }
-        } else {
-          m_memory_partition_unit->set_done(data);
-          delete data;
+          delete cmd;
         }
-        delete cmd;
       }
 #ifdef DRAM_VIEWCMD
       printf("\n");

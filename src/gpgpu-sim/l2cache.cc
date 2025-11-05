@@ -544,11 +544,14 @@ void memory_partition_unit::dram_cycle() {
           compress32B_and_record(sector_addr, line);
         }
       }
-      mem_fetch *rdd_mf = new mem_fetch(*mf);
-      mf->set_redundancy_pair(rdd_mf);
-      rdd_mf->set_redundancy_pair(mf);
+      //sg05060:251103_RMW
+      //mem_fetch *rdd_mf = new mem_fetch(*mf);
+      //mf->set_redundancy_pair(rdd_mf);
+      //rdd_mf->set_redundancy_pair(mf);
+      //m_dram->push(mf);
+      //m_dram->push(rdd_mf);
+      mf->set_is_need_rdd(true);
       m_dram->push(mf);
-      m_dram->push(rdd_mf);
     }
   }
 
