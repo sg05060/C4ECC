@@ -352,26 +352,26 @@ void dram_t::cycle() {
         mem_fetch *data = cmd->data;
 
         //sg05060:251103_RMW
-        if(data->is_rmw_internal_req()) {
-          if(data->is_rmw_shadow_read()) {
-            assert(data->get_rmw_parent());
-            //printf("[RMW][shadow_rd_finish] parent=%p shadow=%p rmw_id=%u\n",
-            //      data->get_rmw_parent(), data, data->get_rmw_id());
-            //printf("    flags: internal=%d srd=%d parent_set=%d\n",
-            //      (int)data->is_rmw_internal_req(),
-            //      (int)data->is_rmw_shadow_read(),
-            //      (data->get_rmw_parent()!=nullptr));
-            mem_fetch* parent = data->get_rmw_parent();
-            if(parent) {
-              parent->set_rmw_state(RMW_WAIT_WR_RDD);
-            } else {
-              assert(0);
-            }
-            delete data;
-            delete cmd;
-          }
-        }
-        else {
+        //if(data->is_rmw_internal_req()) {
+        //  if(data->is_rmw_shadow_read()) {
+        //    assert(data->get_rmw_parent());
+        //    //printf("[RMW][shadow_rd_finish] parent=%p shadow=%p rmw_id=%u\n",
+        //    //      data->get_rmw_parent(), data, data->get_rmw_id());
+        //    //printf("    flags: internal=%d srd=%d parent_set=%d\n",
+        //    //      (int)data->is_rmw_internal_req(),
+        //    //      (int)data->is_rmw_shadow_read(),
+        //    //      (data->get_rmw_parent()!=nullptr));
+        //    mem_fetch* parent = data->get_rmw_parent();
+        //    if(parent) {
+        //      parent->set_rmw_state(RMW_WAIT_WR_RDD);
+        //    } else {
+        //      assert(0);
+        //    }
+        //    delete data;
+        //    delete cmd;
+        //  }
+        //}
+        //else {
           data->set_status(IN_PARTITION_MC_RETURNQ,
                           m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
           if (data->get_access_type() != L1_WRBK_ACC &&
@@ -392,7 +392,7 @@ void dram_t::cycle() {
           }
           delete cmd;
         }
-      }
+      //}
 #ifdef DRAM_VIEWCMD
       printf("\n");
 #endif
