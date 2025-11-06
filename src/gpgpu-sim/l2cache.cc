@@ -84,7 +84,8 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
       m_arbitration_metadata(config),
       m_gpu(gpu) {
   m_dram = new dram_t(m_id, m_config, m_stats, this, gpu);
-  m_rcache = new redundancy_cache(8,4);
+  m_rcache = new redundancy_cache(64,32);
+  m_w_rcache = new redundancy_cache(16,8);
   m_bdi = new comp::BDI(32);
   m_cpack = new comp::CPACK(32);
   m_bpc = new comp::BPC(32);
@@ -92,6 +93,7 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
 
   m_compress_fail = 0;
   m_compress_success = 0;
+  m_rdd_write_mf_copy_count = 0;
 
   m_sub_partition = new memory_sub_partition
       *[m_config->m_n_sub_partition_per_memory_channel];
@@ -544,14 +546,39 @@ void memory_partition_unit::dram_cycle() {
           compress32B_and_record(sector_addr, line);
         }
       }
-      //sg05060:251103_RMW
-      //mem_fetch *rdd_mf = new mem_fetch(*mf);
-      //mf->set_redundancy_pair(rdd_mf);
-      //rdd_mf->set_redundancy_pair(mf);
-      //m_dram->push(mf);
-      //m_dram->push(rdd_mf);
-      mf->set_is_need_rdd(true);
-      m_dram->push(mf);
+      ////sg05060:251103_RMW
+      //if((m_rdd_write_mf_copy_count % 8) == 0) {
+      //  mem_fetch *rdd_mf = new mem_fetch(*mf);
+      //  mf->set_redundancy_pair(rdd_mf);
+      //  rdd_mf->set_redundancy_pair(mf);
+      //  m_dram->push(mf);
+      //  m_dram->push(rdd_mf);
+      //} else {
+      //  m_dram->push(mf);
+      //}
+      //m_rdd_write_mf_copy_count++;
+      ////mf->set_is_need_rdd(true);
+      ////m_dram->push(mf);
+      RDD_CACHE_STATE rcache_state = m_w_rcache->access(mf);
+
+      if (rcache_state == RDD_HIT){
+            mf->set_redundancy_pair(nullptr);
+            m_dram->push(mf);
+      }// Redundancy Pending Hit
+      else if (rcache_state == RDD_PENDING_HIT){
+          assert(0);
+      }// Redundancy Miss
+      else{
+          mem_fetch *rdd_mf = new mem_fetch(*mf);
+          mf->set_redundancy_pair(rdd_mf);
+          mf->set_is_need_rdd(true);
+          rdd_mf->set_redundancy_pair(mf);
+          m_w_rcache->update_cache(mf);
+          //m_w_rcache->cleanup_invalid_entries();
+          //m_w_rcache->push_mshr(mf);
+          m_dram->push(mf);
+          m_dram->push(rdd_mf);
+      }
     }
   }
 

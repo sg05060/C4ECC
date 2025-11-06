@@ -372,26 +372,26 @@ void dram_t::cycle() {
         //  }
         //}
         //else {
-          data->set_status(IN_PARTITION_MC_RETURNQ,
-                          m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
-          if (data->get_access_type() != L1_WRBK_ACC &&
-              data->get_access_type() != L2_WRBK_ACC) {
-            data->set_reply();
-            //returnq->push(data);
-            //sg05060: Redundancy->rdd_returnq & Data->returnq
-            if(data->get_is_redundancy()) {
-              //rdd_returnq->push_back(data);
-              delete data;
-            }
-            else {
-              returnq->push(data);
-            }
-          } else {
-            m_memory_partition_unit->set_done(data);
+        data->set_status(IN_PARTITION_MC_RETURNQ,
+                        m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
+        if (data->get_access_type() != L1_WRBK_ACC &&
+            data->get_access_type() != L2_WRBK_ACC) {
+          data->set_reply();
+          //returnq->push(data);
+          //sg05060: Redundancy->rdd_returnq & Data->returnq
+          if(data->get_is_redundancy()) {
+            //rdd_returnq->push_back(data);
             delete data;
           }
-          delete cmd;
+          else {
+            returnq->push(data);
+          }
+        } else {
+          m_memory_partition_unit->set_done(data);
+          delete data;
         }
+        delete cmd;
+      }
       //}
 #ifdef DRAM_VIEWCMD
       printf("\n");

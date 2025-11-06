@@ -135,6 +135,7 @@ class memory_partition_unit {
   class memory_sub_partition **m_sub_partition;
   class dram_t *m_dram;
   class redundancy_cache *m_rcache;
+  class redundancy_cache *m_w_rcache;
   
   //sg05060: compressor
   comp::BDI* m_bdi;
@@ -144,6 +145,7 @@ class memory_partition_unit {
 
   int m_compress_fail;
   int m_compress_success;
+  unsigned m_rdd_write_mf_copy_count;
   CompInfoTable m_comp_table;
 
   class arbitration_metadata {
