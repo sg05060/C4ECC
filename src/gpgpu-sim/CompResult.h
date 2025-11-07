@@ -24,13 +24,18 @@ namespace comp
     {
         CompResult(unsigned lineSize)
             : LineSize(lineSize),
-            OriginalSize(0), CompressedSize(0), CompRatio(0) {};
+            OriginalSize(0), CompressedSize(0), CompRatio(0), CompSuccess(0), CompFail(0) {};
 
         virtual void Update(unsigned uncompSize, unsigned compSize, int selected = 0)
         {
             OriginalSize += uncompSize;
             CompressedSize += compSize;
             CompRatio = (double)OriginalSize / (double)CompressedSize;
+            if(CompRatio >= 1.0756) {
+                CompSuccess++;
+            } else {
+                CompFail++;
+            }
         }
 
         /*** member varibles ***/
@@ -40,6 +45,8 @@ namespace comp
         uint64_t OriginalSize;
         uint64_t CompressedSize;
         double CompRatio;
+        uint64_t CompSuccess;
+        uint64_t CompFail;
     };
 }
 

@@ -39,6 +39,8 @@
 #include "CPACK.h"
 #include "BPC.h"
 #include "CustomBPC.h"
+#include "SC2.h"
+#include "FWC.h"
 //#include "Compressor.h"
 //#include "CompResult.h"
 
@@ -142,9 +144,18 @@ class memory_partition_unit {
   comp::CPACK* m_cpack;
   comp::BPC* m_bpc;
   comp::CustomBPC* m_custom_bpc;
+  comp::SC2* m_sc2;
+  comp::FWC* m_fwc;
 
   int m_compress_fail;
   int m_compress_success;
+  int m_bdi_success;
+  int m_cpack_success;
+  int m_bpc_success;
+  int m_custom_bpc_success;
+  int m_sc2_success;
+  int m_fwc_success;
+
   unsigned m_rdd_write_mf_copy_count;
   CompInfoTable m_comp_table;
 

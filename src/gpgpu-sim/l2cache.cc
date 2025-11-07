@@ -90,9 +90,17 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
   m_cpack = new comp::CPACK(32);
   m_bpc = new comp::BPC(32);
   m_custom_bpc = new comp::CustomBPC(32);
+  m_sc2 = new comp::SC2(32);
+  m_fwc = new comp::FWC();
 
   m_compress_fail = 0;
   m_compress_success = 0;
+  m_bdi_success = 0;
+  m_cpack_success = 0;
+  m_bpc_success = 0;
+  m_custom_bpc_success  = 0;
+  m_sc2_success = 0;
+  m_fwc_success = 0;
   m_rdd_write_mf_copy_count = 0;
 
   m_sub_partition = new memory_sub_partition
@@ -138,8 +146,19 @@ bool memory_partition_unit::compress32B_and_record(size_t addr, const uint8_t* l
   double ratio_cpack = m_cpack->CompressLine(line32B);
   double ratio_bpc = m_bpc->CompressLine(line32B);
   double ratio_custom_bpc = m_custom_bpc->CompressLine(line32B);
+  double ratio_sc2 = m_sc2->CompressLine(line32B);
+  double ratio_fwc = m_fwc->CompressLine(line32B);
   double cThresh = 256.0 / 238.0;
-  bool success = (ratio_bdi >= cThresh) || (ratio_cpack >= cThresh) || (ratio_bpc >= cThresh) || (ratio_custom_bpc >= cThresh);
+
+  if(ratio_bdi >= cThresh) m_bdi_success++;
+  if(ratio_bpc >= cThresh) m_bpc_success++;
+  if(ratio_cpack >= cThresh) m_cpack_success++;
+  if(ratio_custom_bpc >= cThresh) m_custom_bpc_success++;
+  if(ratio_sc2 >= cThresh) m_sc2_success++;
+  if(ratio_fwc >= cThresh) m_fwc_success++;
+
+  bool success = (ratio_cpack >= cThresh) || (ratio_custom_bpc >= cThresh);
+  
   if(success) {
     m_compress_success++;
   }
@@ -679,10 +698,39 @@ void memory_partition_unit::print(FILE *fp) const {
 
   //sg05060: FIXME
   if((m_compress_success + m_compress_fail) != 0) {
-    double compression_coverage = (double)m_compress_success / (m_compress_success + m_compress_fail);
+    int total_cnt = m_compress_success + m_compress_fail;
+
+    double compression_coverage = (double)m_compress_success / total_cnt;
     fprintf(fp, "Memory Partition %u | Compression Coverage: %f, Success: %d, Fail: %d \n", 
             m_id, compression_coverage, m_compress_success, m_compress_fail);
+
+
+    double bpc_coverage = (double)m_bpc_success / total_cnt;
+    fprintf(fp, "    BPC | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            bpc_coverage, m_bpc_success, (total_cnt-m_bpc_success));
+    
+    double bdi_coverage = (double)m_bdi_success / total_cnt;
+    fprintf(fp, "    BDI | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            bdi_coverage, m_bdi_success, (total_cnt-m_bdi_success));
+    
+    double cpack_coverage = (double)m_cpack_success / total_cnt;
+    fprintf(fp, "    CPACK | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            cpack_coverage, m_cpack_success, (total_cnt-m_cpack_success));
+    
+    double sc2_coverage = (double)m_sc2_success / total_cnt;
+    fprintf(fp, "    SC2 | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            sc2_coverage, m_sc2_success, (total_cnt-m_sc2_success));
+
+    double fwc_coverage = (double)m_fwc_success / total_cnt;
+    fprintf(fp, "    FWC | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            fwc_coverage, m_fwc_success, (total_cnt-m_fwc_success));
+    
+    double custom_bpc_coverage = (double)m_custom_bpc_success / total_cnt;
+    fprintf(fp, "    Custom_BPC | Compression Coverage: %f, Success: %d, Fail: %d \n", 
+            custom_bpc_coverage, m_custom_bpc_success, (total_cnt-m_custom_bpc_success));
+    
   }
+  
 
   fprintf(fp, "In Dram Latency Queue (total = %zd): \n",
           m_dram_latency_queue.size());
