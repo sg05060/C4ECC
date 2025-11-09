@@ -85,7 +85,7 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
       m_gpu(gpu) {
   m_dram = new dram_t(m_id, m_config, m_stats, this, gpu);
   m_rcache = new redundancy_cache(64,32);
-  m_w_rcache = new redundancy_cache(16,8);
+  m_w_rcache = new redundancy_cache(64,32);
   m_bdi = new comp::BDI(32);
   m_cpack = new comp::CPACK(32);
   m_bpc = new comp::BPC(32);
