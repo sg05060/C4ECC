@@ -524,26 +524,43 @@ void memory_partition_unit::dram_cycle() {
 
     //sg05060 : Redundancy check 
     if(!(mf->get_is_write())) { // Read Path
-      RDD_CACHE_STATE rcache_state = m_rcache->access(mf);
 
-      if (rcache_state == RDD_HIT){
-            mf->set_redundancy_pair(nullptr);
+      bool is_comp_out = true;
+      bool is_already_set = false;
+      is_already_set = m_comp_table.get((mf->get_addr()), is_comp_out);
+
+      if(!(is_already_set) | (is_comp_out)){ // Already Comp
+        m_dram->push(mf);
+      }
+      else {
+        printf("[PSH_DEBUG] %-6u | %-5d | %-3s | %-4d | %-6u | 0x%012llx\n",
+             mf->get_request_uid(),
+             (int)mf->get_access_type(),
+             yesno(mf->is_write()),
+             mf->get_sub_partition_id(),
+             pair_uid(mf),
+             (unsigned long long)mf->get_addr());
+        RDD_CACHE_STATE rcache_state = m_rcache->access(mf);
+
+        if (rcache_state == RDD_HIT){
+              mf->set_redundancy_pair(nullptr);
+              m_dram->push(mf);
+        }// Redundancy Pending Hit
+        else if (rcache_state == RDD_PENDING_HIT){
+            // redundancy_pair is already set by access func
             m_dram->push(mf);
-      }// Redundancy Pending Hit
-      else if (rcache_state == RDD_PENDING_HIT){
-          // redundancy_pair is already set by access func
-          m_dram->push(mf);
-      }// Redundancy Miss
-      else{
-          mem_fetch *rdd_mf = new mem_fetch(*mf);
-          mf->set_redundancy_pair(rdd_mf);
-          mf->set_is_need_rdd(true);
-          rdd_mf->set_redundancy_pair(mf);
+        }// Redundancy Miss
+        else{
+            mem_fetch *rdd_mf = new mem_fetch(*mf);
+            mf->set_redundancy_pair(rdd_mf);
+            mf->set_is_need_rdd(true);
+            rdd_mf->set_redundancy_pair(mf);
 
-          m_rcache->cleanup_invalid_entries();
-          m_rcache->push_mshr(mf);
-          m_dram->push(mf);
-          m_dram->push(rdd_mf);
+            m_rcache->cleanup_invalid_entries();
+            m_rcache->push_mshr(mf);
+            m_dram->push(mf);
+            m_dram->push(rdd_mf);
+        }
       }
 
       //mem_fetch *rdd_mf = new mem_fetch(*mf);
@@ -556,13 +573,16 @@ void memory_partition_unit::dram_cycle() {
     else { // Write Path
       //sg05060
       auto mask = mf->get_access_sector_mask();
+      bool is_comp = true;
       if(mask.any()) {
         for(int s = 0; s < 4; s++) {
           if (!mask.test(s)) continue;
           const uint8_t* base = reinterpret_cast<const uint8_t*>(mf->data);
           const size_t sector_addr = static_cast<size_t>(mf->get_addr()) + s * SECTOR_SIZE;
           const uint8_t* line = base + s * SECTOR_SIZE;
-          compress32B_and_record(sector_addr, line);
+          if(!compress32B_and_record(sector_addr, line)) {
+            is_comp = false;
+          }
         }
       }
       ////sg05060:251103_RMW
@@ -578,25 +598,30 @@ void memory_partition_unit::dram_cycle() {
       //m_rdd_write_mf_copy_count++;
       ////mf->set_is_need_rdd(true);
       ////m_dram->push(mf);
-      RDD_CACHE_STATE rcache_state = m_w_rcache->access(mf);
+      if(is_comp) {
+        m_dram->push(mf);
+      }
+      else {
+        RDD_CACHE_STATE rcache_state = m_w_rcache->access(mf);
 
-      if (rcache_state == RDD_HIT){
-            mf->set_redundancy_pair(nullptr);
+        if (rcache_state == RDD_HIT){
+              mf->set_redundancy_pair(nullptr);
+              m_dram->push(mf);
+        }// Redundancy Pending Hit
+        else if (rcache_state == RDD_PENDING_HIT){
+            assert(0);
+        }// Redundancy Miss
+        else{
+            mem_fetch *rdd_mf = new mem_fetch(*mf);
+            mf->set_redundancy_pair(rdd_mf);
+            mf->set_is_need_rdd(true);
+            rdd_mf->set_redundancy_pair(mf);
+            m_w_rcache->update_cache(mf);
+            //m_w_rcache->cleanup_invalid_entries();
+            //m_w_rcache->push_mshr(mf);
             m_dram->push(mf);
-      }// Redundancy Pending Hit
-      else if (rcache_state == RDD_PENDING_HIT){
-          assert(0);
-      }// Redundancy Miss
-      else{
-          mem_fetch *rdd_mf = new mem_fetch(*mf);
-          mf->set_redundancy_pair(rdd_mf);
-          mf->set_is_need_rdd(true);
-          rdd_mf->set_redundancy_pair(mf);
-          m_w_rcache->update_cache(mf);
-          //m_w_rcache->cleanup_invalid_entries();
-          //m_w_rcache->push_mshr(mf);
-          m_dram->push(mf);
-          m_dram->push(rdd_mf);
+            m_dram->push(rdd_mf);
+        }
       }
     }
   }

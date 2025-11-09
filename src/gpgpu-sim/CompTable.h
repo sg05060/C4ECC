@@ -27,7 +27,7 @@ public:
   }
 
   // 조회: false면 “모름(기록 안됨)”
-  inline bool get(uint64_t addr, bool &is_comp_out) const {
+  inline bool get(uint64_t addr, bool &is_comp_out) {
     uint64_t pk = page_key(addr);
     auto it = pages_.find(pk);
     if (it == pages_.end()) return false;
