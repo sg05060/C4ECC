@@ -533,13 +533,13 @@ void memory_partition_unit::dram_cycle() {
         m_dram->push(mf);
       }
       else {
-        printf("[PSH_DEBUG] %-6u | %-5d | %-3s | %-4d | %-6u | 0x%012llx\n",
-             mf->get_request_uid(),
-             (int)mf->get_access_type(),
-             yesno(mf->is_write()),
-             mf->get_sub_partition_id(),
-             pair_uid(mf),
-             (unsigned long long)mf->get_addr());
+        //printf("[PSH_DEBUG] %-6u | %-5d | %-3s | %-4d | %-6u | 0x%012llx\n",
+        //     mf->get_request_uid(),
+        //     (int)mf->get_access_type(),
+        //     yesno(mf->is_write()),
+        //     mf->get_sub_partition_id(),
+        //     pair_uid(mf),
+        //     (unsigned long long)mf->get_addr());
         RDD_CACHE_STATE rcache_state = m_rcache->access(mf);
 
         if (rcache_state == RDD_HIT){
